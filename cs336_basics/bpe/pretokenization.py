@@ -1,13 +1,9 @@
 import os
-import time
-import logging
 from typing import BinaryIO
 from collections import defaultdict
 import regex as re # faster than built-in `re`
 from multiprocessing import Pool
 
-
-logger = logging.getLogger(__name__)
 
 # https://github.com/openai/tiktoken/pull/234/files
 PAT = (
