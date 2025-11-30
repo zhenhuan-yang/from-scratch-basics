@@ -2,7 +2,7 @@ import os
 import time
 import logging
 from collections import defaultdict
-from pretokenization import pretokenize_file_in_parallel
+from .pretokenization import pretokenize_file_in_parallel
 
 
 logger = logging.getLogger(__name__)
