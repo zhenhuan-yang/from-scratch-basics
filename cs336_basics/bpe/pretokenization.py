@@ -101,7 +101,7 @@ def pretokenize_and_count(text: str) -> dict[tuple[bytes], int]:
 
 
 def _build_word_freq_for_chunk(
-    input_path: str | os.PathLike,
+    input_path: str,
     chunk_start: int,
     chunk_end: int,
     special_tokens: list[str],
@@ -141,13 +141,12 @@ def combine_chunk_freq(freq_list: list[dict[tuple[bytes, ...], int]]) -> dict[tu
 
 
 def pretokenize_file_in_parallel(
-    input_path: str | os.PathLike,
+    input_path: str,
     desired_num_chunks: int,
     special_tokens: list[str],
 ) -> dict[tuple[bytes, ...], int]:
     """Pretokenize a file in parallel and return pre-token frequency
     """
-    input_path = os.fspath(input_path)
     if special_tokens:
         special_token_bytes = special_tokens[0].encode("utf-8")
     else:
