@@ -100,6 +100,23 @@ def pretokenize_and_count(text: str) -> dict[tuple[bytes], int]:
     return freq
 
 
+def pretokenize_in_serial(input_path: str, special_tokens: list[str]):
+    """Serial: read whole file once and pretokenize.
+    """
+    with open(input_path, "rb") as f:
+        text = f.read().decode("utf-8", errors="ignore")
+
+    segments = split_on_special_tokens(text, special_tokens)
+
+    freq: dict[tuple[bytes, ...], int] = defaultdict(int)
+    for seg in segments:
+        seg_freq = pretokenize_and_count(seg)
+        for r, c in seg_freq.items():
+            freq[r] += c
+
+    return freq
+
+
 def _build_word_freq_for_chunk(
     input_path: str,
     chunk_start: int,
@@ -140,7 +157,7 @@ def combine_chunk_freq(freq_list: list[dict[tuple[bytes, ...], int]]) -> dict[tu
     return combined_freq
 
 
-def pretokenize_file_in_parallel(
+def pretokenize_in_parallel(
     input_path: str,
     desired_num_chunks: int,
     special_tokens: list[str],
@@ -171,3 +188,26 @@ def pretokenize_file_in_parallel(
         partial_freqs: list[dict[tuple[bytes, ...], int]] = pool.starmap(_build_word_freq_for_chunk, worker_args)
 
     return combine_chunk_freq(partial_freqs)
+
+def pretokenize_file(
+    input_path: str,
+    special_tokens: list[str],
+    desired_num_chunks: int | None = None,
+) -> dict[tuple[bytes, ...], int]:
+    """
+    Wrapper:
+      - If desired_num_chunks is None or <= 1 → serial
+      - Else → parallel
+    """
+    if desired_num_chunks is None or desired_num_chunks <= 1:
+        return pretokenize_in_serial(
+            input_path=input_path,
+            special_tokens=special_tokens,
+        )
+
+    # fall back to your existing parallel implementation
+    return pretokenize_in_parallel(
+        input_path=input_path,
+        desired_num_chunks=desired_num_chunks,
+        special_tokens=special_tokens,
+    )

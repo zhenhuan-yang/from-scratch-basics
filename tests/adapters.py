@@ -591,7 +591,7 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    desired_num_chunks = kwargs.pop("desired_num_chunks", os.cpu_count())
+    desired_num_chunks = kwargs.pop("desired_num_chunks", 1)
     
     vocab, merges = train_bpe(
         input_path,

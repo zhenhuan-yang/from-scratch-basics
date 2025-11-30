@@ -2,7 +2,7 @@ import os
 import time
 import logging
 from collections import defaultdict
-from .pretokenization import pretokenize_file_in_parallel
+from .pretokenization import pretokenize_file
 
 
 logger = logging.getLogger(__name__)
@@ -83,15 +83,12 @@ def apply_merge(
     a, b = most_freq_pair
     new_token = a + b
 
-    # We'll build a new corpus dict based on the old one
-    new_freq: dict[tuple[bytes, ...], int] = dict(freq)
+    # We'll build a new corpus dict
+    new_freq: dict[tuple[bytes, ...], int] = defaultdict(int)
 
     for old_repr, old_count in freq.items():
         new_repr = merge_pair_in_sequence(old_repr, most_freq_pair, new_token)
-
-        # new_repr should not already exist for this merge step
-        assert new_repr not in new_freq
-        new_freq[new_repr] = old_count
+        new_freq[new_repr] = new_freq.get(new_repr, 0) + old_count
 
     # Replace corpus dict in-place
     freq.clear()
@@ -116,7 +113,7 @@ def train_bpe(
         raise ValueError("vocab_size must be > 256 (need room for merges + specials).")
     
     # Parallel pretokenization
-    freq: dict[tuple[bytes, ...], int] = pretokenize_file_in_parallel(
+    freq: dict[tuple[bytes, ...], int] = pretokenize_file(
         input_path=input_path,
         desired_num_chunks=desired_num_chunks,
         special_tokens=special_tokens
