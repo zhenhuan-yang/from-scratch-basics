@@ -37,6 +37,29 @@ def compute_pair_counts(
     return pair_counts
 
 
+def build_pair_stats(
+    freq: dict[tuple[bytes, ...], int]
+) -> tuple[dict[tuple[bytes, bytes], int], dict[tuple[bytes, bytes], set[tuple[bytes, ...]]]]:
+    """
+    Build:
+      - pair_counts[pair] = total frequency in corpus
+      - pair_to_seqs[pair] = set of seqs (tuples) that contain that pair
+    """
+    pair_counts: dict[tuple[bytes, bytes], int] = defaultdict(int)
+    pair_to_seqs: dict[tuple[bytes, bytes], set[tuple[bytes, ...]]] = defaultdict(set)
+
+    for seq, count in freq.items():
+        if len(seq) < 2:
+            continue
+        # Walk adjacent pairs
+        for i in range(len(seq) - 1):
+            pair = (seq[i], seq[i + 1])
+            pair_counts[pair] += count
+            pair_to_seqs[pair].add(seq)
+
+    return pair_counts, pair_to_seqs
+
+
 def find_most_freq_pair(pair_counts: dict[tuple[bytes, bytes], int]) -> tuple[bytes, bytes]:
     """Pick the most freq pair with tie breaking by lexicographically greater pair.
     """
@@ -97,6 +120,82 @@ def apply_merge(
     return new_token
 
 
+def apply_merge_incremental(
+    freq: dict[tuple[bytes, ...], int],
+    most_freq_pair: tuple[bytes, bytes],
+    pair_counts: dict[tuple[bytes, bytes], int],
+    pair_to_seqs: dict[tuple[bytes, bytes], set[tuple[bytes, ...]]],
+) -> bytes:
+    """
+    Apply merge of `most_freq_pair` to all sequences that contain it,
+    updating:
+      - freq (corpus)
+      - pair_counts
+      - pair_to_seqs
+
+    This is mathematically equivalent to recomputing from scratch, just faster.
+    """
+    a, b = most_freq_pair
+    new_token = a + b
+
+    # Get all sequences that contain this pair (copy because we'll mutate structures)
+    affected_seqs = list(pair_to_seqs.pop(most_freq_pair, []))
+    if not affected_seqs:
+        # Shouldn't really happen if pair_counts was > 0, but be robust
+        return new_token
+
+    # 1) Remove contribution of OLD sequences from pair_counts / pair_to_seqs
+    #    and compute their merged versions.
+    merged_seqs: dict[tuple[bytes, ...], int] = defaultdict(int)
+
+    for old_seq in affected_seqs:
+        # This seq might already have been merged in a prior step (collapsed to another seq)
+        old_count = freq.pop(old_seq, None)
+        if old_count is None:
+            continue
+
+        # Subtract all pairs from pair_counts and pair_to_seqs
+        if len(old_seq) >= 2:
+            for i in range(len(old_seq) - 1):
+                p = (old_seq[i], old_seq[i + 1])
+                # Decrease count
+                pair_counts[p] -= old_count
+                if pair_counts[p] <= 0:
+                    # Clean up if no occurrences left
+                    del pair_counts[p]
+                    pair_to_seqs.pop(p, None)
+                else:
+                    # Remove this sequence from the set
+                    seqs_set = pair_to_seqs.get(p)
+                    if seqs_set is not None:
+                        seqs_set.discard(old_seq)
+                        if not seqs_set:
+                            pair_to_seqs.pop(p, None)
+
+        # Build merged sequence and aggregate counts
+        new_seq = merge_pair_in_sequence(old_seq, most_freq_pair, new_token)
+        merged_seqs[new_seq] += old_count
+
+    # 2) Add NEW sequences + their pairs into freq, pair_counts, pair_to_seqs
+    for new_seq, added_count in merged_seqs.items():
+        # Update corpus
+        prev = freq.get(new_seq, 0)
+        freq[new_seq] = prev + added_count
+
+        if len(new_seq) < 2:
+            continue
+
+        for i in range(len(new_seq) - 1):
+            p = (new_seq[i], new_seq[i + 1])
+            pair_counts[p] = pair_counts.get(p, 0) + added_count
+            # If seq was already in the set due to prev count, set.add handles it
+            if p not in pair_to_seqs:
+                pair_to_seqs[p] = set()
+            pair_to_seqs[p].add(new_seq)
+
+    return new_token
+
+
 def train_bpe(
     input_path: str,
     vocab_size: int,
@@ -132,11 +231,12 @@ def train_bpe(
         raise ValueError(
             f"vocab_size={vocab_size} too small for {len(vocab)} bytes + {len(special_tokens)} specials"
         )
+
+    # Build initial stats once
+    pair_counts, pair_to_seqs = build_pair_stats(freq)
     
     # Main BPE loop
     for _ in range(max_merges):
-        # Recompute pair counts from scratch
-        pair_counts = compute_pair_counts(freq)
         if not pair_counts:
             break
 
@@ -146,7 +246,8 @@ def train_bpe(
             break
 
         # Apply merge to whole corpus
-        new_token = apply_merge(freq, most_freq_pair)
+        # new_token = apply_merge(freq, most_freq_pair)
+        new_token = apply_merge_incremental(freq, most_freq_pair, pair_counts, pair_to_seqs)
 
         # Record merge and add new token to vocab
         merges.append(most_freq_pair)
