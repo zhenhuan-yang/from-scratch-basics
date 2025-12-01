@@ -7,7 +7,7 @@ from tests.common import gpt2_bytes_to_unicode
 
 
 TINYSTORIES_SPECIAL = "<|endoftext|>"
-VOCAB_SIZE = 10000
+VOCAB_SIZE = 32000
 
 
 def _bytes_to_gpt2_token(bseq: bytes, byte_encoder: dict[int, str]) -> str:
@@ -15,7 +15,7 @@ def _bytes_to_gpt2_token(bseq: bytes, byte_encoder: dict[int, str]) -> str:
     return "".join(byte_encoder[b] for b in bseq)
 
 
-def train_bpe_tinystories(
+def train_bpe_owt(
     input_path: str,
     output_dir: str
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
@@ -68,9 +68,9 @@ def train_bpe_tinystories(
     return vocab, merges
 
 if __name__ == "__main__":
-    input_path = "data/TinyStoriesV2-GPT4-train.txt"
-    output_dir = "data/tokenizer/tinystories"
-    vocab, merges = train_bpe_tinystories(
+    input_path = "data/owt_train.txt"
+    output_dir = "data/tokenizer/owt"
+    vocab, merges = train_bpe_owt(
         input_path=input_path,
         output_dir=output_dir,
     )
